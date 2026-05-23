@@ -35,13 +35,35 @@ try {
 
   if (firebaseConfig) {
     const firebaseApp = initializeApp(firebaseConfig);
-    db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId || firebaseConfig.projectId);
+    if (firebaseConfig.firestoreDatabaseId) {
+      db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
+    } else {
+      db = getFirestore(firebaseApp);
+    }
     console.log("[FIREBASE SUCCESS] Firestore database interface initialized successfully.");
   } else {
     console.warn("[FIREBASE WARN] Neither firebase-applet-config.json file nor Firebase environment variables were found. Falling back to local offline persistence.");
   }
 } catch (err) {
   console.error("[FIREBASE ERROR] Failed to initialize Firebase backend database:", err);
+}
+
+// Firestore operation timeout wrapper to guarantee responsive execution and prevent hangs
+async function withTimeout<T>(promise: Promise<T>, timeoutMs = 2000): Promise<T> {
+  let timer: any = null;
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error("Firestore database connection timeout. Falling back to local offline persistence."));
+    }, timeoutMs);
+  });
+  try {
+    const result = await Promise.race([promise, timeoutPromise]);
+    if (timer) clearTimeout(timer);
+    return result;
+  } catch (err) {
+    if (timer) clearTimeout(timer);
+    throw err;
+  }
 }
 
 // Files paths for local fallback persistence
@@ -285,11 +307,11 @@ async function getSettings(): Promise<SalonSettings> {
   if (db) {
     try {
       const docRef = doc(db, "settings", "config");
-      const docSnap = await getDoc(docRef);
+      const docSnap = await withTimeout(getDoc(docRef));
       if (docSnap.exists()) {
         return docSnap.data() as SalonSettings;
       } else {
-        await setDoc(docRef, DEFAULT_SETTINGS);
+        await withTimeout(setDoc(docRef, DEFAULT_SETTINGS));
         return DEFAULT_SETTINGS;
       }
     } catch (err) {
@@ -317,7 +339,7 @@ async function saveSettings(settings: SalonSettings): Promise<void> {
   if (db) {
     try {
       const docRef = doc(db, "settings", "config");
-      await setDoc(docRef, settings);
+      await withTimeout(setDoc(docRef, settings));
     } catch (err) {
       console.error("Firestore save settings failed, error:", err);
     }
@@ -334,11 +356,11 @@ async function getAppointments(): Promise<Booking[]> {
   if (db) {
     try {
       const colRef = collection(db, "appointments");
-      const qSnap = await getDocs(colRef);
+      const qSnap = await withTimeout(getDocs(colRef));
       if (qSnap.empty) {
         console.log("Firestore empty. Seeding initial appointments...");
         for (const booking of SEED_APPOINTMENTS) {
-          await setDoc(doc(db, "appointments", booking.id), booking);
+          await withTimeout(setDoc(doc(db, "appointments", booking.id), booking));
         }
         return SEED_APPOINTMENTS;
       }
@@ -381,7 +403,7 @@ async function saveAppointmentToDb(booking: Booking): Promise<void> {
   if (db) {
     try {
       const docRef = doc(db, "appointments", booking.id);
-      await setDoc(docRef, booking);
+      await withTimeout(setDoc(docRef, booking));
     } catch (err) {
       console.error("Firestore save booking failed, error:", err);
     }
@@ -393,7 +415,7 @@ async function deleteAppointmentFromDb(id: string): Promise<void> {
   if (db) {
     try {
       const docRef = doc(db, "appointments", id);
-      await deleteDoc(docRef);
+      await withTimeout(deleteDoc(docRef));
     } catch (err) {
       console.error("Firestore delete booking failed, error:", err);
     }
@@ -406,7 +428,13 @@ async function deleteAppointmentFromDb(id: string): Promise<void> {
 
 // 1. PUBLIC SETTINGS LOAD
 app.get("/api/settings", async (req, res) => {
-  res.json(await getSettings());
+  try {
+    const settings = await getSettings();
+    res.json(settings);
+  } catch (err) {
+    console.error("Failed to load salon settings:", err);
+    res.status(500).json({ error: "Failed to load salon settings. Local persistence fallback active." });
+  }
 });
 
 // 2. ADMIN SETTINGS EXCLUSIVE UPDATE
@@ -551,74 +579,89 @@ app.post("/api/appointments/book", async (req, res) => {
 
 // 5. ADMIN BOOKINGS MANAGEMENT (Protected)
 app.get("/api/appointments", authenticateAdmin, async (req, res) => {
-  const { search, status, date } = req.query;
-  let appointments = await getAppointments();
+  try {
+    const { search, status, date } = req.query;
+    let appointments = await getAppointments();
 
-  // Search filter
-  if (search) {
-    const term = String(search).toLowerCase();
-    appointments = appointments.filter(
-      (b) => b.name.toLowerCase().includes(term) || b.phone.includes(term)
-    );
+    // Search filter
+    if (search) {
+      const term = String(search).toLowerCase();
+      appointments = appointments.filter(
+        (b) => b.name.toLowerCase().includes(term) || b.phone.includes(term)
+      );
+    }
+
+    // Status Filter
+    if (status && status !== "all") {
+      appointments = appointments.filter((b) => b.status === status);
+    }
+
+    // Date Filter
+    if (date) {
+      appointments = appointments.filter((b) => b.date === date);
+    }
+
+    // Sort: newest first
+    appointments.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    res.json(appointments);
+  } catch (err) {
+    console.error("Failed to retrieve admin appointments:", err);
+    res.status(500).json({ error: "Failed to retrieve appointments." });
   }
-
-  // Status Filter
-  if (status && status !== "all") {
-    appointments = appointments.filter((b) => b.status === status);
-  }
-
-  // Date Filter
-  if (date) {
-    appointments = appointments.filter((b) => b.date === date);
-  }
-
-  // Sort: newest first
-  appointments.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-  res.json(appointments);
 });
 
 // 6. ADMIN UPDATE STATUS (Protected)
 app.put("/api/appointments/:id", authenticateAdmin, async (req, res) => {
-  const { id } = req.params;
-  const updates = req.body;
-  const current = await getAppointments();
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+    const current = await getAppointments();
 
-  const index = current.findIndex((b) => b.id === id);
-  if (index === -1) {
-    return res.status(404).json({ error: "Booking coordinate index not found." });
+    const index = current.findIndex((b) => b.id === id);
+    if (index === -1) {
+      return res.status(404).json({ error: "Booking coordinate index not found." });
+    }
+
+    // Preserve ID and creation, apply update block details safely
+    const updatedBooking = {
+      ...current[index],
+      ...updates,
+      id: current[index].id // ID remains immutable
+    };
+
+    current[index] = updatedBooking;
+    await saveAppointments(current);
+    await saveAppointmentToDb(updatedBooking);
+
+    // Print email/WhatsApp hooks log on status changes
+    console.log(`[STATUS NOTIFICATION UPDATE] Approved/Rejected state change for booking ${id} trigger set to WhatsApp logs!`);
+
+    res.json(updatedBooking);
+  } catch (err) {
+    console.error("Failed to update appointment:", err);
+    res.status(500).json({ error: "Failed to apply appointment updates." });
   }
-
-  // Preserve ID and creation, apply update block details safely
-  const updatedBooking = {
-    ...current[index],
-    ...updates,
-    id: current[index].id // ID remains immutable
-  };
-
-  current[index] = updatedBooking;
-  await saveAppointments(current);
-  await saveAppointmentToDb(updatedBooking);
-
-  // Print email/WhatsApp hooks log on status changes
-  console.log(`[STATUS NOTIFICATION UPDATE] Approved/Rejected state change for booking ${id} trigger set to WhatsApp logs!`);
-
-  res.json(updatedBooking);
 });
 
 // 7. ADMIN DELETE APPOINTMENT (Protected)
 app.delete("/api/appointments/:id", authenticateAdmin, async (req, res) => {
-  const { id } = req.params;
-  const current = await getAppointments();
+  try {
+    const { id } = req.params;
+    const current = await getAppointments();
 
-  const filtered = current.filter((b) => b.id !== id);
-  if (filtered.length === current.length) {
-    return res.status(404).json({ error: "Target appointment not found." });
+    const filtered = current.filter((b) => b.id !== id);
+    if (filtered.length === current.length) {
+      return res.status(404).json({ error: "Target appointment not found." });
+    }
+
+    await saveAppointments(filtered);
+    await deleteAppointmentFromDb(id);
+    res.json({ message: "Appointment record permanently removed." });
+  } catch (err) {
+    console.error("Failed to delete appointment:", err);
+    res.status(500).json({ error: "Failed to permanently remove appointment." });
   }
-
-  await saveAppointments(filtered);
-  await deleteAppointmentFromDb(id);
-  res.json({ message: "Appointment record permanently removed." });
 });
 
 // ------------------------------------------------------------------
