@@ -11,32 +11,52 @@ const PORT = 3000;
 
 app.use(express.json());
 
-// Load Firebase Config safely
+// Load Firebase Config safely from file or environment variables fallback
 const CONFIG_PATH = path.join(process.cwd(), "firebase-applet-config.json");
 let db: any = null;
 
 try {
+  let firebaseConfig: any = null;
+  
   if (fs.existsSync(CONFIG_PATH)) {
     const configContent = fs.readFileSync(CONFIG_PATH, "utf8");
-    const firebaseConfig = JSON.parse(configContent);
+    firebaseConfig = JSON.parse(configContent);
+  } else if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_API_KEY) {
+    console.log("[FIREBASE INFO] Local config file missing; loading configuration from environment variables.");
+    firebaseConfig = {
+      projectId: process.env.FIREBASE_PROJECT_ID,
+      appId: process.env.FIREBASE_APP_ID,
+      apiKey: process.env.FIREBASE_API_KEY,
+      authDomain: process.env.FIREBASE_AUTH_DOMAIN,
+      firestoreDatabaseId: process.env.FIREBASE_DATABASE_ID,
+      storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
+      messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID,
+    };
+  }
+
+  if (firebaseConfig) {
     const firebaseApp = initializeApp(firebaseConfig);
-    db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
+    db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId || firebaseConfig.projectId);
     console.log("[FIREBASE SUCCESS] Firestore database interface initialized successfully.");
   } else {
-    console.warn("[FIREBASE WARN] firebase-applet-config.json file is missing.");
+    console.warn("[FIREBASE WARN] Neither firebase-applet-config.json file nor Firebase environment variables were found. Falling back to local offline persistence.");
   }
 } catch (err) {
   console.error("[FIREBASE ERROR] Failed to initialize Firebase backend database:", err);
 }
 
 // Files paths for local fallback persistence
-const DATA_DIR = path.join(process.cwd(), "data");
+const DATA_DIR = process.env.VERCEL === "1" ? "/tmp/data" : path.join(process.cwd(), "data");
 const APPOINTMENTS_FILE = path.join(DATA_DIR, "appointments.json");
 const SETTINGS_FILE = path.join(DATA_DIR, "settings.json");
 
 // Ensure data folder exists
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+try {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+} catch (err) {
+  console.warn("[PERSISTENCE WARN] Failed to create data folder:", err);
 }
 
 // ------------------------------------------------------------------
@@ -278,7 +298,11 @@ async function getSettings(): Promise<SalonSettings> {
     }
   }
   if (!fs.existsSync(SETTINGS_FILE)) {
-    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(DEFAULT_SETTINGS, null, 2), "utf8");
+    try {
+      fs.writeFileSync(SETTINGS_FILE, JSON.stringify(DEFAULT_SETTINGS, null, 2), "utf8");
+    } catch (err) {
+      console.warn("[PERSISTENCE WARN] Failed to write default settings file locally:", err);
+    }
     return DEFAULT_SETTINGS;
   }
   try {
@@ -299,7 +323,11 @@ async function saveSettings(settings: SalonSettings): Promise<void> {
       console.error("Firestore save settings failed, error:", err);
     }
   }
-  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2), "utf8");
+  try {
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2), "utf8");
+  } catch (err) {
+    console.warn("[PERSISTENCE WARN] Failed to save settings file locally:", err);
+  }
 }
 
 // Read appointments
@@ -325,7 +353,11 @@ async function getAppointments(): Promise<Booking[]> {
     }
   }
   if (!fs.existsSync(APPOINTMENTS_FILE)) {
-    fs.writeFileSync(APPOINTMENTS_FILE, JSON.stringify(SEED_APPOINTMENTS, null, 2), "utf8");
+    try {
+      fs.writeFileSync(APPOINTMENTS_FILE, JSON.stringify(SEED_APPOINTMENTS, null, 2), "utf8");
+    } catch (err) {
+      console.warn("[PERSISTENCE WARN] Failed to write seed appointments file locally:", err);
+    }
     return SEED_APPOINTMENTS;
   }
   try {
@@ -338,7 +370,11 @@ async function getAppointments(): Promise<Booking[]> {
 
 // Save appointments
 async function saveAppointments(appointments: Booking[]): Promise<void> {
-  fs.writeFileSync(APPOINTMENTS_FILE, JSON.stringify(appointments, null, 2), "utf8");
+  try {
+    fs.writeFileSync(APPOINTMENTS_FILE, JSON.stringify(appointments, null, 2), "utf8");
+  } catch (err) {
+    console.warn("[PERSISTENCE WARN] Failed to save appointments file locally:", err);
+  }
 }
 
 // Save single appointment to firestore (helper)
@@ -609,4 +645,8 @@ async function startServer() {
   });
 }
 
-startServer();
+if (process.env.VERCEL !== "1") {
+  startServer();
+}
+
+export default app;
