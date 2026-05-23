@@ -1,0 +1,14 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Settings configuration rules
+    match /settings/config {
+      allow read, write: if true;
+    }
+
+    // Appointments database rules
+    match /appointments/{appointmentId} {
+      allow read, write: if true;
+    }
+  }
+}

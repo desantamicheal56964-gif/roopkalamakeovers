@@ -1,0 +1,89 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Playfair Display", ui-serif, Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  /* Custom luxury gold scale and accent hues */
+  --color-gold-50: #FCF9F2;
+  --color-gold-100: #F7F0DF;
+  --color-gold-200: #EFE0C0;
+  --color-gold-300: #E4CC9C;
+  --color-gold-400: #D8B574;
+  --color-gold-500: #C99E53;
+  --color-gold-600: #AF813C;
+  --color-gold-700: #8E652E;
+  --color-gold-800: #6F4E24;
+  --color-gold-900: #553A1B;
+  --color-gold-950: #3a2510;
+
+  --color-gold-accent: #E6C280; /* Soft, warm champagne gold */
+  --color-gold-bright: #F5DCA0;
+  --color-gold-deep: #C5A059;
+  --color-rose-accent: #E2A9B1; /* Dusty rose */
+
+  --color-charcoal-950: #060606;
+  --color-charcoal-900: #0D0D0D;
+  --color-charcoal-800: #171717;
+  --color-charcoal-700: #222222;
+  --color-charcoal-600: #2C2C2C;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0D0D0D;
+}
+::-webkit-scrollbar-thumb {
+  background: #3C2A0A;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #E6C280;
+}
+
+/* Frosted Glass Theme Classes */
+.mesh-bg {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: 
+    radial-gradient(circle at 20% 30%, rgba(0, 112, 243, 0.12) 0%, transparent 45%),
+    radial-gradient(circle at 80% 70%, rgba(255, 0, 128, 0.08) 0%, transparent 45%),
+    radial-gradient(circle at 50% 50%, rgba(255, 215, 0, 0.04) 0%, transparent 50%);
+  background-color: #050505;
+  z-index: -1;
+}
+
+.glass {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.accent-pink {
+  color: #FF0080;
+}
+
+.accent-gold {
+  color: #D4AF37;
+}
+
+.btn-primary {
+  background: #0070F3;
+  transition: all 0.2s ease-in-out;
+}
+
+.btn-primary:hover {
+  background: #0056b3;
+  box-shadow: 0 0 15px rgba(0, 112, 243, 0.4);
+}
+

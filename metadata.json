@@ -1,0 +1,6 @@
+{
+  "name": "Roopkala Makeover",
+  "description": "Premium luxury dark-themed beauty parlour and bridal makeover salon website featuring direct WhatsApp bookings.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

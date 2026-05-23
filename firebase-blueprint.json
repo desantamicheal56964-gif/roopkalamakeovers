@@ -1,0 +1,49 @@
+{
+  "entities": {
+    "Booking": {
+      "title": "Booking",
+      "description": "An appointment booking in the salon schedule",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "notes": { "type": "string" },
+        "bridalPackageType": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected", "completed", "cancelled"] },
+        "totalPrice": { "type": "number" },
+        "createdAt": { "type": "string" },
+        "selectedServices": {
+          "type": "array"
+        }
+      },
+      "required": ["id", "name", "phone", "date", "time", "status", "totalPrice", "createdAt"]
+    },
+    "SalonSettings": {
+      "title": "SalonSettings",
+      "description": "Salon operational settings and restrictions",
+      "type": "object",
+      "properties": {
+        "workingHours": { "type": "object" },
+        "availableSlots": { "type": "array" },
+        "maxBookingsPerDay": { "type": "number" },
+        "holidays": { "type": "array" },
+        "blockedDates": { "type": "array" },
+        "disabledSlotsByDate": { "type": "object" }
+      },
+      "required": ["workingHours", "availableSlots", "maxBookingsPerDay", "holidays", "blockedDates", "disabledSlotsByDate"]
+    }
+  },
+  "firestore": {
+    "appointments/{appointmentId}": {
+      "schema": "Booking",
+      "description": "Stored appointments list"
+    },
+    "settings/config": {
+      "schema": "SalonSettings",
+      "description": "Salon dynamic configuration settings"
+    }
+  }
+}
